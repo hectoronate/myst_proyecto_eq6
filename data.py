@@ -30,9 +30,9 @@ import pandas as pd
 # filepath1.parent.mkdir(parents=True, exist_ok=True)  
 # 1m_df.to_csv(filepath1)
 
-BTCUSDT15m = pd.read_csv('files/BTCUSDT_15m.csv')
-BTCUSDT15m.drop(columns=['Unnamed: 0', 'Ignore', 'Close Time','Quote Asset Volume', 
-                         'Number of Trades', 'TB Base Volume','TB Quote Volume'], inplace = True)
+BTCUSDT = pd.read_csv('files/BTCUSDT_15m.csv')
+BTCUSDT.drop(columns=['Unnamed: 0', 'Ignore', 'Close Time','Quote Asset Volume',
+                      'Number of Trades', 'TB Base Volume','TB Quote Volume'], inplace = True)
 
-BTCUSDT15m['Open Time'] = BTCUSDT15m['Open Time'].apply(pd.to_datetime)
+BTCUSDT['Open Time'] = BTCUSDT['Open Time'].apply(pd.to_datetime)
 

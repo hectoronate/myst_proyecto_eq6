@@ -1,39 +1,219 @@
 """
 # -- --------------------------------------------------------------------------------------------------- -- #
-# -- project: A SHORT DESCRIPTION OF THE PROJECT                                                         -- #
+# -- project: Technical Analysis                                                                         -- #
 # -- script: functions.py : python script with general functions                                         -- #
-# -- author: YOUR GITHUB USER NAME                                                                       -- #
-# -- license: THE LICENSE TYPE AS STATED IN THE REPOSITORY                                               -- #
-# -- repository: YOUR REPOSITORY URL                                                                     -- #
+# -- author: @Rub27182n | @if722399 | @hectoronate                                                       -- #
+# -- license: TGNU General Public License v3.0                                                           -- #
+# -- repository: https://github.com/Rub27182n/myst_proyecto_eq6.git                                      -- #
 # -- --------------------------------------------------------------------------------------------------- -- #
 """
+import ta
 import data as dt
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pandas_ta as pta
+import visualizations as vz
+from pandas_ta import Imports
+from numpy import nan as npNaN
+from pandas_ta.utils import get_drift, get_offset, verify_series
 
-# -------------- Stochastic RSI -------------- #
+# ------------------------- Stochastic RSI ----------------------------------------------------------------------------
+def stochrsi_d(close: pd.Series, 
+               window: int = 14, 
+               smooth1: int = 3, 
+               smooth2: int = 3) -> pd.Series:
+    
+    """Stochastic Relative Strenght Index D (SRSId)
+    The SRSI takes advantage of both momentum indicators in order to create a more 
+    sensitive indicator that is attuned to a specific security's historical performance
+    rather than a generalized analysis of price change.
+    
+    Args:
+        close(pandas.Series): dataset 'Close' column.
+        window(int): n period
+        smooth1(int): moving average of Stochastic RSI
+        smooth2(int): moving average of %K
 
-def Stoch_RSI(df,n,rsi_name):
+    Returns:
+            pandas.Series: New feature generated.
 
-    ''' Indicator: Relative Strength Index (RSI) '''
+    References:
+        [1] https://www.investopedia.com/terms/s/stochrsi.asp
+    """
 
-    Stoch_RSI_t = []
-    for i in range(len(df[rsi_name])-n):
-        temp = df[rsi_name][i:i+n]
-        L_RSI = np.min(temp)
-        M_RSI = np.max(temp)
-        RSI = temp.values[-1]
+    return ta.momentum.StochRSIIndicator(
+        close=close, 
+        window=window, 
+        smooth1=smooth1, 
+        smooth2=smooth2).stochrsi_d()
 
-        Stoch_RSI_t.append(( RSI - L_RSI )   /  ( M_RSI - L_RSI))
+def stochrsi_k(close: pd.Series,window: int = 14,smooth1: int = 3,smooth2: int = 3,fillna: bool = False,) -> pd.Series:
+    
+    """Stochastic Relative Strenght Index K (SRSId)
+    The SRSI takes advantage of both momentum indicators in order to create a more 
+    sensitive indicator that is attuned to a specific security's historical performance
+    rather than a generalized analysis of price change.
+
+    Args:
+        close(pandas.Series): dataset 'Close' column.
+        window(int): n period
+        smooth1(int): moving average of Stochastic RSI
+        smooth2(int): moving average of %K
+
+    Returns:
+            pandas.Series: New feature generated.
+
+    References:
+        [1] https://www.investopedia.com/terms/s/stochrsi.asp
+    """
+
+    return ta.momentum.StochRSIIndicator(
+        close=close, 
+        window=window, 
+        smooth1=smooth1, 
+        smooth2=smooth2).stochrsi_k()
+
+# --------------------------------ATR--------------------------------------------------------------
+def atr(high, 
+        low, 
+        close, 
+        length=None, 
+        mamode=None, 
+        talib=None, 
+        drift=None, 
+        offset=None, **kwargs):
+
+    """Average True Range (ATR)
+    Averge True Range is used to measure volatility, especially volatility caused by
+    gaps or limit moves.
+
+    Args:
+        high (pd.Series): Series of 'high's
+        low (pd.Series): Series of 'low's
+        close (pd.Series): Series of 'close's
+        length (int): It's period. Default: 14
+        mamode (str): See ```help(ta.ma)```. Default: 'rma'
+        talib (bool): If TA Lib is installed and talib is True, Returns the TA Lib
+            version. Default: True
+        drift (int): The difference period. Default: 1
+        offset (int): How many periods to offset the result. Default: 0
+
+    Returns:
+        pd.Series: New feature generated.
+
+    References:
+        https://www.tradingview.com/wiki/Average_True_Range_(ATR)
+"""
+    # Validate arguments
+    length = int(length) if length and length > 0 else 14
+    mamode = mamode.lower() if mamode and isinstance(mamode, str) else "rma"
+    high = verify_series(high, length)
+    low = verify_series(low, length)
+    close = verify_series(close, length)
+    drift = get_drift(drift)
+    offset = get_offset(offset)
+    mode_tal = bool(talib) if isinstance(talib, bool) else True
+
+    if high is None or low is None or close is None: return
+
+    # Calculate Result
+    if Imports["talib"] and mode_tal:
+        from talib import ATR
+        atr = ATR(high, low, close, length)
+    else:
+        tr = pta.true_range(high=high, low=low, close=close, drift=drift)
+        atr = pta.overlap.ma(mamode, tr, length=length)
+
+    percentage = kwargs.pop("percent", False)
+    if percentage:
+        atr *= 100 / close
+
+    # Offset
+    if offset != 0:
+        atr = atr.shift(offset)
+
+    # Handle fills
+    if "fillna" in kwargs:
+        atr.fillna(kwargs["fillna"], inplace=True)
+    if "fill_method" in kwargs:
+        atr.fillna(method=kwargs["fill_method"], inplace=True)
+
+    # Name and Categorize it
+    atr.name = f"ATR{mamode[0]}_{length}{'p' if percentage else ''}"
+    atr.category = "volatility"
+
+    return atr
 
 
-    Stoch_RSI =  np.zeros(len(df))
-    Stoch_RSI[n:] = np.array(Stoch_RSI_t)*100
+#----------------------------- EMA ---------------------------------------------------------------------------------------------
 
-    return Stoch_RSI
+def ema(close, 
+        length=None, 
+        talib=None, 
+        offset=None, **kwargs):
 
-#------------------------------VWAP--------------------------------------
+    """Exponential Moving Average (EMA)
+    The Exponential Moving Average is more responsive moving average compared to the
+    Simple Moving Average (SMA).  The weights are determined by alpha which is
+    proportional to it's length.  There are several different methods of calculating
+    EMA.  One method uses just the standard definition of EMA and another uses the
+    SMA to generate the initial value for the rest of the calculation.
+    
+    Args:
+        close (pd.Series): Series of 'close's
+        length (int): It's period. Default: 10
+        talib (bool): If TA Lib is installed and talib is True, Returns the TA Lib
+            version. Default: True
+        offset (int): How many periods to offset the result. Default: 0
+
+    Returns:
+        pd.Series
+
+    References:
+        [1] https://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:moving_averages
+        [2] https://www.investopedia.com/ask/answers/122314/what-exponential-moving-average-ema-formula-and-how-ema-calculated.asp
+"""
+
+    # Validate Arguments
+    length = int(length) if length and length > 0 else 10
+    adjust = kwargs.pop("adjust", False)
+    sma = kwargs.pop("sma", True)
+    close = verify_series(close, length)
+    offset = get_offset(offset)
+    mode_tal = bool(talib) if isinstance(talib, bool) else True
+
+    if close is None: return
+
+    # Calculate Result
+    if Imports["talib"] and mode_tal:
+        from talib import EMA
+        ema = EMA(close, length)
+    else:
+        if sma:
+            close = close.copy()
+            sma_nth = close[0:length].mean()
+            close[:length - 1] = npNaN
+            close.iloc[length - 1] = sma_nth
+        ema = close.ewm(span=length, adjust=adjust).mean()
+
+    # Offset
+    if offset != 0:
+        ema = ema.shift(offset)
+
+    # Handle fills
+    if "fillna" in kwargs:
+        ema.fillna(kwargs["fillna"], inplace=True)
+    if "fill_method" in kwargs:
+        ema.fillna(method=kwargs["fill_method"], inplace=True)
+
+    # Name & Category
+    ema.name = f"EMA_{length}"
+    ema.category = "overlap"
+
+    return ema
+
+
+#---------------------------------VWAP--------------------------------------------------------
 def vwap(high, low, close, volume, anchor=None, offset=None, **kwargs):
     """Indicator: Volume Weighted Average Price (VWAP)"""
 
@@ -63,11 +243,11 @@ def vwap(high, low, close, volume, anchor=None, offset=None, **kwargs):
     return vwap
 
 
-#-------------------------------PIVOTS-----------------------------------
+#-------------------------------PIVOTS--------------------------------------------------------
 def pivots(_open, high, low, close, anchor=None, method=None):
 
     anchor = anchor.upper() if anchor and isinstance(anchor, str) and len(anchor) >= 1 else "D"
-    method_list = ["traditional", "fibonacci", "woodie", "classic", "demark", "camarilla"]
+    method_list = ["traditional", "fibonacci", "woodie", "classic", "camarilla"]
     method = method if method in method_list else "traditional"
     date = close.index
 
@@ -137,32 +317,6 @@ def pivots(_open, high, low, close, anchor=None, method=None):
         a["r3"] = a.p.values + 2 * a.pivot_range.values
         a["r4"] = a.p.values + 3 * a.pivot_range.values
         a.drop(["pivot_range"], axis=1, inplace=True)
-
-    elif method == "demark":
-        conds = (
-            a.close.values == a.open.values,
-            a.close.values > a.open.values,
-        )
-        vals = (
-            a.high.values + a.low.values + a.close.values * 2,
-            a.high.values * 2 + a.low.values + a.close.values,
-        )
-        p = np.select(conds, vals, default=(a.high.values + a.low.values * 2 + a.close.values))
-        a["p"] = p / 4
-        a["s1"] = p / 2 - a.high.values
-        a["r1"] = p / 2 - a.low.values
-    elif method == "camarilla":
-        a["p"] = (a.high.values + a.low.values + a.close.values) / 3
-        a["pivot_range"] = a.high.values - a.low.values
-        a["s1"] = a.close.values - a.pivot_range.values * 1.1 / 12
-        a["s2"] = a.close.values - a.pivot_range.values * 1.1 / 6
-        a["s3"] = a.close.values - a.pivot_range.values * 1.1 / 4
-        a["s4"] = a.close.values - a.pivot_range.values * 1.1 / 2
-        a["r1"] = a.close.values + a.pivot_range.values * 1.1 / 12
-        a["r2"] = a.close.values + a.pivot_range.values * 1.1 / 6
-        a["r3"] = a.close.values + a.pivot_range.values * 1.1 / 4
-        a["r4"] = a.close.values + a.pivot_range.values * 1.1 / 2
-        a.drop(["pivot_range"], axis=1, inplace=True)
     else:
         raise ValueError("Invalid method")
 
@@ -176,129 +330,4 @@ def pivots(_open, high, low, close, anchor=None, method=None):
     return pivots_df
 
 
-#----------------------------- EMA200 & Signal ---------------------------------
 
-def EMA200_Signal(df)-> dict:
-
-    # -------Calculate EMA200 Metric: -------
-    df['EMA200'] = pta.ema(df.Close, length = 200)
-
-
-
-    # -------Generate the signal: -------
-    emasignal = [0]*len(df)
-    backcandles = 8
-
-    for j in range(backcandles-1,len(df)):
-        upt = 1
-        dnt = 1
-        for i in range(j-backcandles,j+1):
-            if df.High[j]>= df.EMA200[j]:
-                dnt = 0
-            if df.Low[j]<= df.EMA200[j]:
-                upt = 0
-        if upt == 1 and dnt == 1:
-            emasignal[j] = 3
-        elif upt == 1:
-            emasignal[j] = 2
-        elif dnt == 1:
-            emasignal[j] = 1
-
-    return {'EMA200':df['EMA200'],'EMA200_Signal':emasignal}
-
-
-    #----------------------------- Total Signal ------------------------------#
-
-def TotSignal(df)-> 'List':
-    
-    ''' The input df must have columns with the RSI and the EMA200 signals'''
-
-    TotSignal = [0] * len(df)
-    for i in range(len(df)):
-        TotSignal[i] = 0
-        if df.EMA_Signal[i] == 1 and df.RSI[i] >= 70:
-            TotSignal[i] = 1
-        if df.EMA_Signal[i] == 2 and df.RSI[i] <= 30:
-            TotSignal[i] = 2
-
-    return TotSignal
-
-#----------------------------- Point Positions ------------------------------#
-
-def pointpos(x):
-
-    ''' This function was created for visualizations purposes'''
-
-    if x['TotSignal'] == 1:
-        return x['High'] + 50
-    elif x['TotSignal'] == 2:
-        return x['Low'] - 50
-    else: 
-        return np.nan
-
-#----------------------------- Final strategy function ------------------------------#
-
-
-
-def final_strategy(data,ema_length,rsi_length,n_months=30,initial_cash=1000000,commission=.00):
-
-    ''' This is the function which will test our trading strategy
-    
-    Metrics: RSI, EMA200
-    
-    '''
-
-    # get the ema signal 
-    data['EMA'] = pta.ema(data.Close, length = ema_length)
-    temp = data['EMA']>data.Close
-    data['EMA_Signal'] = temp.rolling(8).sum() >= 8 
-    data['EMA_Signal'] = data['EMA_Signal'].replace({True: 2, False: 1})
-
-    # get the rsi
-    data['RSI'] = pta.rsi(data.Close, length = rsi_length)
-
-    # get ATR
-    data['ATR'] = pta.atr(data['High'],data['Low'],data['Close'])
-    
-    #get TotSignal
-    data['TotSignal'] = fn.TotSignal(data)
-
-    data.dropna(inplace=True)
-    
-    # Select period of time 
-    months = 24*4*30
-    startid = 0
-    data.set_index("Open Time", inplace=True)
-    dfpl = data[startid:startid+n_months*months]
-
-
-    def SIGNAL():
-        return dfpl.TotSignal
-    
-    
-    class MyStrat(Strategy):
-        initsize = .1
-        mysize = initsize
-        def init(self):
-            super().init()
-            self.signal1 = self.I(SIGNAL)
-
-        def next(self):
-            super().next()
-            slatr = self.data.ATR[-1]
-            TPSLRatio = 1.5
-
-            if self.signal1 == 2 and len(self.trades)==0:
-                sl1 = self.data.Close[-1] - slatr
-                tp1 = self.data.Close[-1] + slatr*TPSLRatio
-                self.buy(sl=sl1, tp=tp1,size=self.mysize)
-
-            elif self.signal1 == 1 and len(self.trades)==0:
-                sl1 = self.data.Close[-1] + slatr
-                tp1 = self.data.Close[-1] - slatr*TPSLRatio
-                self.sell(sl = sl1, tp=tp1,size=self.mysize)
-
-     
-    bt = Backtest(dfpl, MyStrat, cash=initial_cash, commission=commission)
-    stat = bt.run()
-    return stat
